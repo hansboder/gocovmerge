@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
 
 	"golang.org/x/tools/cover"
@@ -96,6 +98,9 @@ func dumpProfiles(profiles []*cover.Profile, out io.Writer) {
 }
 
 func main() {
+	dir := flag.String("dir", "", "the dir will scan")
+	pattern := flag.String("pattern", "", "cover pattern to match")
+
 	flag.Parse()
 
 	var merged []*cover.Profile
@@ -107,6 +112,41 @@ func main() {
 		}
 		for _, p := range profiles {
 			merged = addProfile(merged, p)
+		}
+	}
+
+	if *dir != "" && *pattern != "" {
+		re, err := regexp.Compile(*pattern)
+		if err != nil {
+			panic(err)
+		}
+
+		var files []string
+
+		filepath.Walk(*dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			if info.IsDir() {
+				return nil
+			}
+
+			if re.MatchString(path) {
+				files = append(files, path)
+			}
+
+			return nil
+		})
+
+		for _, file := range files {
+			profiles, err := cover.ParseProfiles(file)
+			if err != nil {
+				log.Fatalf("failed to parse profiles: %v", err)
+			}
+			for _, p := range profiles {
+				merged = addProfile(merged, p)
+			}
 		}
 	}
 
